@@ -6,7 +6,7 @@ const Register = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
- const handleRegistration = (e) => {
+ const handleRegistration = async (e) => {
     e.preventDefault();
     
     const userData = {
@@ -15,7 +15,7 @@ const Register = () => {
         password: password
     }
     try{
-        const response = axios.post('http://localhost:8000/api/register/', userData)
+        const response = await axios.post('http://localhost:8000/api/register/', userData)
         console.log('Registration successful:', response.data);
         console.log('Registration Successful');
     }catch(error){
