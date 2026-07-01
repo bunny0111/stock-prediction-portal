@@ -23,4 +23,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     # Base API Endpoint
     path('api/v1/', include('api.urls')),
+    # Analysis platform endpoints (Phase 1+)
+    path('api/v1/', include('analysis.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

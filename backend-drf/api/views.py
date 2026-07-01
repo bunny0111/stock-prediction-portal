@@ -69,6 +69,10 @@ class stockPredictionAPIView(APIView):
 
             df.set_index("Date", inplace=True)
 
+            # Some tickers/indices (e.g. ^NSEI) return null bars from Yahoo; drop
+            # them so the LSTM never receives NaN values (which crash the metrics).
+            df = df.dropna(subset=["Close"])
+
             if df.empty:
                 return Response({
                     "error": "No data found for the given ticker.",
@@ -139,6 +143,19 @@ class stockPredictionAPIView(APIView):
                 y_test.append(input_data[i, 0])
             x_test, y_test = np.array(x_test), np.array(y_test)
 
+            # Guard: newly listed / low-history tickers (e.g. SPCX) don't have
+            # enough data to fill the 100-day LSTM window, leaving x_test empty.
+            # Calling model.predict([]) crashes deep inside Keras, so return a
+            # clean, friendly error instead.
+            if x_test.shape[0] == 0:
+                return Response({
+                    "error": (
+                        f"Not enough historical data for '{ticker}' to run a prediction. "
+                        f"This model needs roughly a year or more of trading history, "
+                        f"so recently listed stocks won't work yet."
+                    )
+                }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
             # Make Predictions
             y_predicted = model.predict(x_test)
 
@@ -173,7 +190,18 @@ class stockPredictionAPIView(APIView):
 
             # R-Squared - How well your model predictions match the actual value
             r2 = r2_score(y_test, y_predicted)
-            
+
+
+            # Next trading day prediction
+            # Take the last 100 actual closing prices and predict the next day
+            last_100_days = df.Close.tail(100)
+            last_100_scaled = scaler.transform(last_100_days.values.reshape(-1, 1))
+            x_next = np.array([last_100_scaled])  # shape (1, 100, 1)
+            next_day_scaled = model.predict(x_next)
+            next_day_price = scaler.inverse_transform(next_day_scaled.reshape(-1, 1)).flatten()[0]
+
+            last_close = float(df.Close.iloc[-1])
+            last_date = df.Date.iloc[-1].strftime('%Y-%m-%d')
 
             return Response({
                 "status": "success",
@@ -183,5 +211,8 @@ class stockPredictionAPIView(APIView):
                 'plot_prediction': plot_prediction,
                 'mse': mse,
                 'rmse': rmse,
-                'r2': r2
+                'r2': r2,
+                'next_day_prediction': round(float(next_day_price), 2),
+                'last_close': round(last_close, 2),
+                'last_date': last_date
             })
